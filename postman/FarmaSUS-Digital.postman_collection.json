@@ -1,0 +1,126 @@
+{
+  "info": {
+    "name": "FarmaSUS Digital",
+    "description": "API de reserva de medicamentos do SUS",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "item": [
+    {
+      "name": "Medicamentos",
+      "item": [
+        {
+          "name": "Listar medicamentos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/estoque/medicamentos",
+              "host": ["{{base_url}}"],
+              "path": ["estoque", "medicamentos"]
+            }
+          }
+        },
+        {
+          "name": "Cadastrar medicamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Dipirona Sódica 500mg\",\n  \"quantidadeEstoque\": 100\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/estoque/medicamentos",
+              "host": ["{{base_url}}"],
+              "path": ["estoque", "medicamentos"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pacientes",
+      "item": [
+        {
+          "name": "Buscar paciente por CPF ou telefone",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/pacientes/52998224725",
+              "host": ["{{base_url}}"],
+              "path": ["pacientes", "52998224725"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reservas",
+      "item": [
+        {
+          "name": "Consultar reservas do paciente",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reservas/paciente/1",
+              "host": ["{{base_url}}"],
+              "path": ["reservas", "paciente", "1"]
+            }
+          }
+        },
+        {
+          "name": "Cancelar reserva",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/reservas/1/cancelar",
+              "host": ["{{base_url}}"],
+              "path": ["reservas", "1", "cancelar"]
+            }
+          }
+        },
+        {
+          "name": "Retirar reserva",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/reservas/1/retirar",
+              "host": ["{{base_url}}"],
+              "path": ["reservas", "1", "retirar"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Telegram",
+      "item": [
+        {
+          "name": "Simular mensagem recebida (webhook)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"update_id\": 1,\n  \"message\": {\n    \"chat\": { \"id\": 999999 },\n    \"text\": \"oi\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/telegram/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["telegram", "webhook"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
