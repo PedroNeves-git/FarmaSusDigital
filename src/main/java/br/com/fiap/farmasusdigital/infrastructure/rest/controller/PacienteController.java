@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import br.com.fiap.farmasusdigital.application.usecase.BuscarPacienteUseCase;
 import br.com.fiap.farmasusdigital.domain.exception.PacienteNaoEncontradoException;
 import br.com.fiap.farmasusdigital.infrastructure.rest.dto.PacienteResponse;
+import io.swagger.v3.oas.annotations.Parameter;
 
 @RestController
 @RequestMapping("/pacientes")
@@ -21,7 +22,9 @@ public class PacienteController {
     }
 
     @GetMapping("/{identificador}")
-    public ResponseEntity<PacienteResponse> buscar(@PathVariable String identificador) {
+    public ResponseEntity<PacienteResponse> buscar(
+            @Parameter(example = "52998224725", description = "CPF ou telefone do paciente")
+            @PathVariable String identificador) {
         return buscarPacienteUseCase.executarPorIdentificador(identificador)
                 .map(PacienteResponse::from)
                 .map(ResponseEntity::ok)

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "FarmaSUS Digital",
-    "description": "API de reserva de medicamentos do SUS",
+    "description": "API de reserva de medicamentos do SUS. Todas as requisições já vêm com exemplos preenchidos, prontas pra usar — basta ter a aplicação rodando em {{base_url}} (padrão: http://localhost:8080, ou via docker compose).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -18,6 +18,7 @@
           "name": "Listar medicamentos",
           "request": {
             "method": "GET",
+            "description": "Lista todos os medicamentos e a quantidade disponível em estoque.",
             "url": {
               "raw": "{{base_url}}/estoque/medicamentos",
               "host": ["{{base_url}}"],
@@ -29,6 +30,7 @@
           "name": "Cadastrar medicamento",
           "request": {
             "method": "POST",
+            "description": "Dá entrada de um novo medicamento (ou de mais unidades) no estoque.",
             "header": [
               { "key": "Content-Type", "value": "application/json" }
             ],
@@ -52,6 +54,7 @@
           "name": "Buscar paciente por CPF ou telefone",
           "request": {
             "method": "GET",
+            "description": "O identificador pode ser o CPF (com ou sem pontuação) ou o telefone/chat id usado no Telegram.",
             "url": {
               "raw": "{{base_url}}/pacientes/52998224725",
               "host": ["{{base_url}}"],
@@ -68,6 +71,7 @@
           "name": "Consultar reservas do paciente",
           "request": {
             "method": "GET",
+            "description": "Histórico de reservas do paciente (ativa, retirada, cancelada ou expirada).",
             "url": {
               "raw": "{{base_url}}/reservas/paciente/1",
               "host": ["{{base_url}}"],
@@ -79,6 +83,7 @@
           "name": "Cancelar reserva",
           "request": {
             "method": "POST",
+            "description": "Cancela a reserva e devolve os itens ao estoque.",
             "url": {
               "raw": "{{base_url}}/reservas/1/cancelar",
               "host": ["{{base_url}}"],
@@ -90,6 +95,7 @@
           "name": "Retirar reserva",
           "request": {
             "method": "POST",
+            "description": "Confirma a retirada física do medicamento no balcão, encerrando a reserva.",
             "url": {
               "raw": "{{base_url}}/reservas/1/retirar",
               "host": ["{{base_url}}"],
@@ -103,15 +109,35 @@
       "name": "Telegram",
       "item": [
         {
-          "name": "Simular mensagem recebida (webhook)",
+          "name": "Simular mensagem digitada (webhook)",
           "request": {
             "method": "POST",
+            "description": "Simula o paciente digitando uma mensagem de texto pro bot (ex.: \"oi\", um CPF, o nome de um medicamento). Troque o \"text\" e o \"chat.id\" pra testar outras etapas da conversa.",
             "header": [
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"update_id\": 1,\n  \"message\": {\n    \"chat\": { \"id\": 999999 },\n    \"text\": \"oi\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/telegram/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["telegram", "webhook"]
+            }
+          }
+        },
+        {
+          "name": "Simular clique em botão inline (callback_query)",
+          "request": {
+            "method": "POST",
+            "description": "Simula o paciente tocando num botão inline (ex.: \"1\", \"Sim\", \"Finalizar\", \"Cancelar\") em vez de digitar. O \"data\" é o texto do botão tocado.",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"update_id\": 2,\n  \"callback_query\": {\n    \"id\": \"cbq-1\",\n    \"data\": \"1\",\n    \"message\": {\n      \"chat\": { \"id\": 999999 }\n    }\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/telegram/webhook",
