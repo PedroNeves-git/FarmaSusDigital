@@ -6,6 +6,7 @@ import br.com.fiap.farmasusdigital.application.gateway.PacienteGateway;
 import br.com.fiap.farmasusdigital.domain.exception.CpfInvalidoException;
 import br.com.fiap.farmasusdigital.domain.model.Paciente;
 import br.com.fiap.farmasusdigital.domain.service.CpfValidator;
+import br.com.fiap.farmasusdigital.domain.service.NomeFormatter;
 
 @Component
 public class CadastrarPacienteUseCase {
@@ -21,7 +22,7 @@ public class CadastrarPacienteUseCase {
             throw new CpfInvalidoException(cpf);
         }
         String cpfNormalizado = CpfValidator.somenteDigitos(cpf);
-        Paciente paciente = new Paciente(null, cpfNormalizado, nomeCompleto.trim(), telefone);
+        Paciente paciente = new Paciente(null, cpfNormalizado, NomeFormatter.capitalizar(nomeCompleto), telefone);
         return pacienteGateway.salvar(paciente);
     }
 }
