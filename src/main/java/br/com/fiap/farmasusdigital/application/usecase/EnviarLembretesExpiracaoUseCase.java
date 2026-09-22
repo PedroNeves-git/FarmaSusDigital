@@ -6,6 +6,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +24,7 @@ import br.com.fiap.farmasusdigital.domain.model.Reserva;
 @Component
 public class EnviarLembretesExpiracaoUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(EnviarLembretesExpiracaoUseCase.class);
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     private final ReservaGateway reservaGateway;
@@ -51,12 +54,18 @@ public class EnviarLembretesExpiracaoUseCase {
             if (!reserva.precisaDeLembrete(limiteAviso)) {
                 continue;
             }
-            pacienteGateway.buscarPorId(reserva.getPacienteId()).ifPresent(paciente ->
-                    notificacaoGateway.enviarMensagem(paciente.getTelefone(), montarMensagem(reserva)));
+            try {
+                pacienteGateway.buscarPorId(reserva.getPacienteId()).ifPresent(paciente ->
+                        notificacaoGateway.enviarMensagem(paciente.getTelefone(), montarMensagem(reserva)));
 
-            reserva.marcarLembreteEnviado();
-            reservaGateway.salvar(reserva);
-            enviados++;
+                reserva.marcarLembreteEnviado();
+                reservaGateway.salvar(reserva);
+                enviados++;
+            } catch (RuntimeException e) {
+                // isola a falha nessa reserva - as demais do lote continuam
+                // recebendo o lembrete, e essa e retentada no proximo ciclo
+                log.error("Falha ao enviar lembrete da reserva {}: {}", reserva.getId(), e.getMessage(), e);
+            }
         }
         return enviados;
     }
