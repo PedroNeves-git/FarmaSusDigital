@@ -76,9 +76,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.empty());
         when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.empty());
 
-        String resposta = useCase.executar(TELEFONE, "oi");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "oi");
 
-        assertThat(resposta).contains("Seja bem-vindo ao serviço de reservas");
+        assertThat(resposta.mensagem()).contains("Seja bem-vindo ao serviço de reservas");
         ArgumentCaptor<ConversaEstado> captor = ArgumentCaptor.forClass(ConversaEstado.class);
         verify(conversaEstadoGateway).salvar(captor.capture());
         assertThat(captor.getValue().getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_CPF);
@@ -90,10 +90,10 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
         when(reservaGateway.buscarAtivaPorPaciente(1L)).thenReturn(Optional.empty());
 
-        String resposta = useCase.executar(TELEFONE, "oi");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "oi");
 
-        assertThat(resposta).contains("Seja bem-vindo, Maria Silva");
-        assertThat(resposta).contains("Informe o nome de qual medicamento");
+        assertThat(resposta.mensagem()).contains("Seja bem-vindo, <b>Maria Silva</b>");
+        assertThat(resposta.mensagem()).contains("Informe o nome de qual medicamento");
         ArgumentCaptor<ConversaEstado> captor = ArgumentCaptor.forClass(ConversaEstado.class);
         verify(conversaEstadoGateway).salvar(captor.capture());
         assertThat(captor.getValue().getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO);
@@ -108,10 +108,13 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
         when(reservaGateway.buscarAtivaPorPaciente(1L)).thenReturn(Optional.of(reservaAtiva));
 
-        String resposta = useCase.executar(TELEFONE, "oi");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "oi");
 
-        assertThat(resposta).contains("reserva ativa dos itens: Dipirona");
-        assertThat(resposta).contains("Deseja cancelar esta reserva?");
+        assertThat(resposta.mensagem()).contains("reserva ativa dos itens:");
+        assertThat(resposta.mensagem()).contains("• Dipirona");
+        assertThat(resposta.mensagem()).contains("Ela expira em");
+        assertThat(resposta.mensagem()).contains("Deseja cancelar esta reserva?");
+        assertThat(resposta.opcoesRapidas()).containsExactly("Sim", "Não");
         ArgumentCaptor<ConversaEstado> captor = ArgumentCaptor.forClass(ConversaEstado.class);
         verify(conversaEstadoGateway).salvar(captor.capture());
         assertThat(captor.getValue().getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_CONFIRMACAO_CANCELAMENTO);
@@ -123,10 +126,10 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CPF, null);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "529.982.247-25");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "529.982.247-25");
 
-        assertThat(resposta).contains("CPF válido");
-        assertThat(resposta).contains("nome completo");
+        assertThat(resposta.mensagem()).contains("CPF válido");
+        assertThat(resposta.mensagem()).contains("nome completo");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_NOME_PACIENTE);
         assertThat(estado.getCpfTemporario()).isEqualTo("52998224725");
         verify(cadastrarPacienteUseCase, never()).executar(any(), any(), any());
@@ -137,11 +140,45 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CPF, null);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "111.111.111-11");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "111.111.111-11");
 
-        assertThat(resposta).contains("não parece válido");
+        assertThat(resposta.mensagem()).contains("não parece válido");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_CPF);
         verify(conversaEstadoGateway, never()).salvar(any());
+    }
+
+    @Test
+    void deveSempreOferecerOpcaoDeCancelarQuandoCpfInvalido() {
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CPF, null);
+        when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+
+        RespostaConversa resposta = useCase.executar(TELEFONE, "111.111.111-11");
+
+        assertThat(resposta.mensagem()).contains("cancelar");
+    }
+
+    @Test
+    void devePermitirCancelarNoMeioDoCadastroAguardandoCpf() {
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CPF, null);
+        when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+
+        RespostaConversa resposta = useCase.executar(TELEFONE, "cancelar");
+
+        assertThat(resposta.mensagem()).contains("cadastro cancelado");
+        verify(conversaEstadoGateway).remover(TELEFONE);
+    }
+
+    @Test
+    void devePermitirCancelarNoMeioDoCadastroAguardandoNome() {
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_NOME_PACIENTE, null);
+        estado.setCpfTemporario("52998224725");
+        when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+
+        RespostaConversa resposta = useCase.executar(TELEFONE, "desisti, esquece");
+
+        assertThat(resposta.mensagem()).contains("cadastro cancelado");
+        verify(conversaEstadoGateway).remover(TELEFONE);
+        verify(cadastrarPacienteUseCase, never()).executar(any(), any(), any());
     }
 
     @Test
@@ -152,9 +189,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(cadastrarPacienteUseCase.executar(eq("52998224725"), eq("Maria Silva"), eq(TELEFONE)))
                 .thenReturn(PACIENTE);
 
-        String resposta = useCase.executar(TELEFONE, "Maria Silva");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "Maria Silva");
 
-        assertThat(resposta).contains("Cadastro realizado com sucesso, Maria Silva");
+        assertThat(resposta.mensagem()).contains("Cadastro realizado com sucesso, <b>Maria Silva</b>");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO);
         assertThat(estado.getCpfTemporario()).isNull();
     }
@@ -165,9 +202,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         estado.setCpfTemporario("52998224725");
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "Maria");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "Maria");
 
-        assertThat(resposta).contains("nome completo");
+        assertThat(resposta.mensagem()).contains("nome completo");
         verify(cadastrarPacienteUseCase, never()).executar(any(), any(), any());
     }
 
@@ -179,14 +216,14 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(cadastrarPacienteUseCase.executar(any(), any(), any()))
                 .thenThrow(new CpfInvalidoException("52998224725"));
 
-        String resposta = useCase.executar(TELEFONE, "Maria Silva");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "Maria Silva");
 
-        assertThat(resposta).contains("comece novamente");
+        assertThat(resposta.mensagem()).contains("comece novamente");
         verify(conversaEstadoGateway).remover(TELEFONE);
     }
 
     @Test
-    void deveAdicionarItemDiretoQuandoApenasUmMedicamentoCorresponde() {
+    void deveListarOpcaoUnicaEAguardarConfirmacaoQuandoApenasUmMedicamentoCorresponde() {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO, null);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
         when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
@@ -194,15 +231,39 @@ class ProcessarMensagemTelegramUseCaseTest {
         Medicamento dipirona = new Medicamento(10L, "Dipirona Sódica 500mg", 5);
         when(buscarMedicamentosUseCase.executarPorNomeSemelhante("dipirona")).thenReturn(List.of(dipirona));
 
+        RespostaConversa resposta = useCase.executar(TELEFONE, "dipirona");
+
+        assertThat(resposta.mensagem()).contains("Você digitou \"dipirona\"");
+        assertThat(resposta.mensagem()).contains("a seguinte opção");
+        assertThat(resposta.mensagem()).contains("1. Dipirona Sódica 500mg");
+        assertThat(resposta.opcoesRapidas()).containsExactly("1", "Cancelar");
+        assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO);
+        assertThat(estado.getCandidatosMedicamentoIds()).containsExactly(10L);
+        verify(adicionarItemReservaUseCase, never()).executar(any(), any(), anyInt());
+    }
+
+    @Test
+    void deveAdicionarAposConfirmarOpcaoUnicaListada() {
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO, null,
+                List.of(10L));
+        when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+        when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
+
+        Medicamento dipirona = new Medicamento(10L, "Dipirona Sódica 500mg", 5);
+        when(buscarMedicamentosUseCase.executarPorId(10L)).thenReturn(Optional.of(dipirona));
+
         Reserva reserva = Reserva.abrirNova(1L, LocalDateTime.now());
         reserva.setId(50L);
+        reserva.adicionarItem(new ItemReserva(1L, 10L, "Dipirona Sódica 500mg", 1));
         when(adicionarItemReservaUseCase.executar(eq(1L), eq(10L), anyInt())).thenReturn(reserva);
 
-        String resposta = useCase.executar(TELEFONE, "dipirona");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "1");
 
-        assertThat(resposta).contains("Dipirona Sódica 500mg");
-        assertThat(resposta).contains("adicionado à sua reserva");
-        assertThat(resposta).contains("finalizar a reserva");
+        assertThat(resposta.mensagem()).contains("Dipirona Sódica 500mg");
+        assertThat(resposta.mensagem()).contains("Você selecionou");
+        assertThat(resposta.mensagem()).contains("Sua reserva atual");
+        assertThat(resposta.mensagem()).contains("Finalizar");
+        assertThat(resposta.opcoesRapidas()).containsExactly("Finalizar", "Cancelar");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_MAIS_ITENS_OU_FINALIZAR);
         assertThat(estado.getReservaRascunhoId()).isEqualTo(50L);
     }
@@ -214,9 +275,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
         when(buscarMedicamentosUseCase.executarPorNomeSemelhante("xpto")).thenReturn(List.of());
 
-        String resposta = useCase.executar(TELEFONE, "xpto");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "xpto");
 
-        assertThat(resposta).contains("Não encontramos nenhum medicamento parecido");
+        assertThat(resposta.mensagem()).contains("Não encontramos nenhum medicamento parecido");
         verify(adicionarItemReservaUseCase, never()).executar(any(), any(), anyInt());
     }
 
@@ -230,11 +291,13 @@ class ProcessarMensagemTelegramUseCaseTest {
         Medicamento opcao2 = new Medicamento(11L, "Dipirona Monoidratada 1g", 5);
         when(buscarMedicamentosUseCase.executarPorNomeSemelhante("dipirona")).thenReturn(List.of(opcao1, opcao2));
 
-        String resposta = useCase.executar(TELEFONE, "dipirona");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "dipirona");
 
-        assertThat(resposta).contains("Encontramos mais de um medicamento");
-        assertThat(resposta).contains("1. Dipirona Sódica 500mg");
-        assertThat(resposta).contains("2. Dipirona Monoidratada 1g");
+        assertThat(resposta.mensagem()).contains("Você digitou \"dipirona\"");
+        assertThat(resposta.mensagem()).contains("as seguintes opções");
+        assertThat(resposta.mensagem()).contains("1. Dipirona Sódica 500mg");
+        assertThat(resposta.mensagem()).contains("2. Dipirona Monoidratada 1g");
+        assertThat(resposta.opcoesRapidas()).containsExactly("1", "2", "Cancelar");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO);
         assertThat(estado.getCandidatosMedicamentoIds()).containsExactly(10L, 11L);
         verify(adicionarItemReservaUseCase, never()).executar(any(), any(), anyInt());
@@ -254,9 +317,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         reserva.setId(50L);
         when(adicionarItemReservaUseCase.executar(eq(1L), eq(11L), anyInt())).thenReturn(reserva);
 
-        String resposta = useCase.executar(TELEFONE, "2");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "2");
 
-        assertThat(resposta).contains("Dipirona Monoidratada 1g");
+        assertThat(resposta.mensagem()).contains("Dipirona Monoidratada 1g");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_MAIS_ITENS_OU_FINALIZAR);
     }
 
@@ -265,28 +328,35 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO, null,
                 List.of(10L, 11L));
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+        when(buscarMedicamentosUseCase.executarPorId(10L))
+                .thenReturn(Optional.of(new Medicamento(10L, "Dipirona Sódica 500mg", 5)));
+        when(buscarMedicamentosUseCase.executarPorId(11L))
+                .thenReturn(Optional.of(new Medicamento(11L, "Dipirona Monoidratada 1g", 5)));
 
-        String resposta = useCase.executar(TELEFONE, "9");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "9");
 
-        assertThat(resposta).contains("Não entendi sua escolha");
+        assertThat(resposta.mensagem()).contains("Não entendi sua escolha");
+        assertThat(resposta.mensagem()).contains("1. Dipirona Sódica 500mg");
+        assertThat(resposta.mensagem()).contains("2. Dipirona Monoidratada 1g");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO);
         verify(adicionarItemReservaUseCase, never()).executar(any(), any(), anyInt());
     }
 
     @Test
     void devePedirOutroMedicamentoQuandoEstoqueInsuficiente() {
-        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO, null);
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO, null,
+                List.of(10L));
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
         when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
 
         Medicamento semEstoque = new Medicamento(10L, "Dipirona Sódica 500mg", 5);
-        when(buscarMedicamentosUseCase.executarPorNomeSemelhante("dipirona")).thenReturn(List.of(semEstoque));
+        when(buscarMedicamentosUseCase.executarPorId(10L)).thenReturn(Optional.of(semEstoque));
         when(adicionarItemReservaUseCase.executar(eq(1L), eq(10L), anyInt()))
                 .thenThrow(new EstoqueInsuficienteException("Dipirona Sódica 500mg"));
 
-        String resposta = useCase.executar(TELEFONE, "dipirona");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "1");
 
-        assertThat(resposta).contains("não há estoque disponível");
+        assertThat(resposta.mensagem()).contains("não há estoque disponível");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO);
     }
 
@@ -299,9 +369,9 @@ class ProcessarMensagemTelegramUseCaseTest {
                 ReservaStatus.ATIVA, LocalDateTime.now(), LocalDateTime.now().plusDays(1), null);
         when(reservaGateway.buscarPorId(50L)).thenReturn(Optional.of(reserva));
 
-        String resposta = useCase.executar(TELEFONE, "finalizar");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "finalizar");
 
-        assertThat(resposta).contains("Reserva finalizada com sucesso");
+        assertThat(resposta.mensagem()).contains("Reserva finalizada com sucesso");
         verify(conversaEstadoGateway).remover(TELEFONE);
     }
 
@@ -314,10 +384,24 @@ class ProcessarMensagemTelegramUseCaseTest {
                 ReservaStatus.ATIVA, LocalDateTime.now(), LocalDateTime.now().plusDays(1), null);
         when(reservaGateway.buscarPorId(50L)).thenReturn(Optional.of(reserva));
 
-        String resposta = useCase.executar(TELEFONE, "desejo finalizar a reserva");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "desejo finalizar a reserva");
 
-        assertThat(resposta).contains("Reserva finalizada com sucesso");
+        assertThat(resposta.mensagem()).contains("Reserva finalizada com sucesso");
         verify(conversaEstadoGateway).remover(TELEFONE);
+    }
+
+    @Test
+    void deveFinalizarReservaQuandoUsuarioDizConfirmar() {
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_MAIS_ITENS_OU_FINALIZAR, 50L);
+        when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+
+        Reserva reserva = new Reserva(50L, 1L, List.of(new ItemReserva(1L, 10L, "Dipirona", 1)),
+                ReservaStatus.ATIVA, LocalDateTime.now(), LocalDateTime.now().plusDays(1), null);
+        when(reservaGateway.buscarPorId(50L)).thenReturn(Optional.of(reserva));
+
+        RespostaConversa resposta = useCase.executar(TELEFONE, "pode confirmar");
+
+        assertThat(resposta.mensagem()).contains("Reserva finalizada com sucesso");
     }
 
     @Test
@@ -331,10 +415,10 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(removerUltimoItemReservaUseCase.executar(50L))
                 .thenReturn(new RemoverUltimoItemReservaUseCase.Resultado(itemRemovido, Optional.of(reservaAtualizada)));
 
-        String resposta = useCase.executar(TELEFONE, "gostaria de remover esse da reserva");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "gostaria de remover esse da reserva");
 
-        assertThat(resposta).contains("Removi \"Dipirona Sódica 500mg\"");
-        assertThat(resposta).contains("Losartana 50mg");
+        assertThat(resposta.mensagem()).contains("Removi \"Dipirona Sódica 500mg\"");
+        assertThat(resposta.mensagem()).contains("Losartana 50mg");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_MAIS_ITENS_OU_FINALIZAR);
         verify(conversaEstadoGateway, never()).remover(any());
     }
@@ -348,9 +432,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         when(removerUltimoItemReservaUseCase.executar(50L))
                 .thenReturn(new RemoverUltimoItemReservaUseCase.Resultado(itemRemovido, Optional.empty()));
 
-        String resposta = useCase.executar(TELEFONE, "tira esse");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "tira esse");
 
-        assertThat(resposta).contains("cancelei a reserva");
+        assertThat(resposta.mensagem()).contains("cancelei a reserva");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO);
         assertThat(estado.getReservaRascunhoId()).isNull();
     }
@@ -364,9 +448,9 @@ class ProcessarMensagemTelegramUseCaseTest {
                 ReservaStatus.ATIVA, LocalDateTime.now(), LocalDateTime.now().plusDays(1), null);
         when(reservaGateway.buscarPorId(50L)).thenReturn(Optional.of(reserva));
 
-        String resposta = useCase.executar(TELEFONE, "cancela tudo, desisti");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "cancela tudo, desisti");
 
-        assertThat(resposta).contains("tem certeza que deseja cancelar");
+        assertThat(resposta.mensagem()).contains("tem certeza que deseja cancelar");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_CONFIRMACAO_CANCELAMENTO);
         assertThat(estado.getReservaRascunhoId()).isEqualTo(50L);
         verify(conversaEstadoGateway, never()).remover(any());
@@ -377,9 +461,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO, null);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "ah esquece, desisti");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "ah esquece, desisti");
 
-        assertThat(resposta).contains("encerrei o atendimento");
+        assertThat(resposta.mensagem()).contains("encerrei o atendimento");
         verify(conversaEstadoGateway).remover(TELEFONE);
         verify(buscarMedicamentosUseCase, never()).executarPorNomeSemelhante(any());
     }
@@ -389,11 +473,22 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CONFIRMACAO_CANCELAMENTO, 77L);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "talvez");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "talvez");
 
-        assertThat(resposta).contains("Não entendi");
+        assertThat(resposta.mensagem()).contains("Não entendi");
         verify(conversaEstadoGateway, never()).remover(any());
         verify(cancelarReservaUseCase, never()).executar(any());
+    }
+
+    @Test
+    void devePermitirConfirmarCancelamentoDizendoCancelar() {
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CONFIRMACAO_CANCELAMENTO, 77L);
+        when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+
+        RespostaConversa resposta = useCase.executar(TELEFONE, "cancelar");
+
+        assertThat(resposta.mensagem()).contains("reserva foi cancelada com sucesso");
+        verify(cancelarReservaUseCase).executar(77L);
     }
 
     @Test
@@ -401,9 +496,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CONFIRMACAO_CANCELAMENTO, 77L);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "sim");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "sim");
 
-        assertThat(resposta).contains("reserva foi cancelada com sucesso");
+        assertThat(resposta.mensagem()).contains("reserva foi cancelada com sucesso");
         verify(cancelarReservaUseCase, times(1)).executar(77L);
         verify(conversaEstadoGateway).remover(TELEFONE);
     }
@@ -413,9 +508,9 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_CONFIRMACAO_CANCELAMENTO, 77L);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "não");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "não");
 
-        assertThat(resposta).contains("reserva ativa foi mantida");
+        assertThat(resposta.mensagem()).contains("reserva ativa foi mantida");
         verify(cancelarReservaUseCase, never()).executar(any());
         verify(conversaEstadoGateway).remover(TELEFONE);
     }
@@ -425,9 +520,10 @@ class ProcessarMensagemTelegramUseCaseTest {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_MAIS_ITENS_OU_FINALIZAR, 50L);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "ajuda");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "ajuda");
 
-        assertThat(resposta).contains("finalizar");
+        assertThat(resposta.mensagem()).contains("Finalizar");
+        assertThat(resposta.opcoesRapidas()).containsExactly("Finalizar", "Cancelar");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_MAIS_ITENS_OU_FINALIZAR);
         verify(conversaEstadoGateway, never()).salvar(any());
         verify(conversaEstadoGateway, never()).remover(any());
@@ -442,9 +538,9 @@ class ProcessarMensagemTelegramUseCaseTest {
                 ReservaStatus.ATIVA, LocalDateTime.now(), LocalDateTime.now().plusDays(1), null);
         when(reservaGateway.buscarPorId(50L)).thenReturn(Optional.of(reserva));
 
-        String resposta = useCase.executar(TELEFONE, "o que eu já reservei?");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "o que eu já reservei?");
 
-        assertThat(resposta).contains("Dipirona Sódica 500mg");
+        assertThat(resposta.mensagem()).contains("Dipirona Sódica 500mg");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_MAIS_ITENS_OU_FINALIZAR);
         verify(conversaEstadoGateway, never()).salvar(any());
     }
@@ -455,16 +551,16 @@ class ProcessarMensagemTelegramUseCaseTest {
         estado.setCpfTemporario("52998224725");
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
 
-        String resposta = useCase.executar(TELEFONE, "errei o cpf, quero corrigir");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "errei o cpf, quero corrigir");
 
-        assertThat(resposta).contains("Informe seu CPF novamente");
+        assertThat(resposta.mensagem()).contains("Informe seu CPF novamente");
         assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_CPF);
         assertThat(estado.getCpfTemporario()).isNull();
         verify(cadastrarPacienteUseCase, never()).executar(any(), any(), any());
     }
 
     @Test
-    void deveReservarQuantidadeInformadaAntesDoNomeDoMedicamento() {
+    void deveGuardarQuantidadeInformadaAntesDoNomeAoListarOpcao() {
         ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_NOME_MEDICAMENTO, null);
         when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
         when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
@@ -472,14 +568,32 @@ class ProcessarMensagemTelegramUseCaseTest {
         Medicamento dipirona = new Medicamento(10L, "Dipirona Sódica 500mg", 5);
         when(buscarMedicamentosUseCase.executarPorNomeSemelhante("dipironas")).thenReturn(List.of(dipirona));
 
+        RespostaConversa resposta = useCase.executar(TELEFONE, "2 dipironas");
+
+        assertThat(resposta.mensagem()).contains("Dipirona Sódica 500mg");
+        assertThat(estado.getEstado()).isEqualTo(EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO);
+        assertThat(estado.getQuantidadeDesejada()).isEqualTo(2);
+    }
+
+    @Test
+    void deveReservarQuantidadeInformadaAposConfirmarOpcaoUnica() {
+        ConversaEstado estado = new ConversaEstado(TELEFONE, EstadoConversa.AGUARDANDO_ESCOLHA_MEDICAMENTO, null,
+                List.of(10L));
+        estado.setQuantidadeDesejada(2);
+        when(conversaEstadoGateway.buscarPorTelefone(TELEFONE)).thenReturn(Optional.of(estado));
+        when(buscarPacienteUseCase.executarPorTelefone(TELEFONE)).thenReturn(Optional.of(PACIENTE));
+
+        Medicamento dipirona = new Medicamento(10L, "Dipirona Sódica 500mg", 5);
+        when(buscarMedicamentosUseCase.executarPorId(10L)).thenReturn(Optional.of(dipirona));
+
         Reserva reserva = Reserva.abrirNova(1L, LocalDateTime.now());
         reserva.setId(50L);
         when(adicionarItemReservaUseCase.executar(eq(1L), eq(10L), eq(2))).thenReturn(reserva);
 
-        String resposta = useCase.executar(TELEFONE, "2 dipironas");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "1");
 
-        assertThat(resposta).contains("2x");
-        assertThat(resposta).contains("Dipirona Sódica 500mg");
+        assertThat(resposta.mensagem()).contains("2x");
+        assertThat(resposta.mensagem()).contains("Dipirona Sódica 500mg");
     }
 
     @Test
@@ -497,8 +611,8 @@ class ProcessarMensagemTelegramUseCaseTest {
         reserva.setId(50L);
         when(adicionarItemReservaUseCase.executar(eq(1L), eq(11L), eq(3))).thenReturn(reserva);
 
-        String resposta = useCase.executar(TELEFONE, "2");
+        RespostaConversa resposta = useCase.executar(TELEFONE, "2");
 
-        assertThat(resposta).contains("3x");
+        assertThat(resposta.mensagem()).contains("3x");
     }
 }

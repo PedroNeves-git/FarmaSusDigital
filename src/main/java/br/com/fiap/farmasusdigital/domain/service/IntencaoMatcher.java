@@ -14,7 +14,8 @@ import java.util.regex.Pattern;
 public final class IntencaoMatcher {
 
     private static final List<String> GATILHOS_FINALIZAR = List.of(
-            "finaliz", "conclu", "encerr", "fechar", "so isso", "nada mais", "e isso");
+            "finaliz", "conclu", "encerr", "fechar", "so isso", "nada mais", "e isso",
+            "confirmar reserva", "confirmar a reserva", "pode confirmar");
 
     private static final List<String> GATILHOS_CANCELAR_TUDO = List.of(
             "cancel", "desist", "esquece", "deixa pra la", "nao quero mais nada",
@@ -72,9 +73,14 @@ public final class IntencaoMatcher {
         }
         Matcher matcher = PADRAO_QUANTIDADE.matcher(texto.trim());
         if (matcher.matches()) {
-            int quantidade = Integer.parseInt(matcher.group(1));
-            if (quantidade >= 1) {
-                return new TextoComQuantidade(quantidade, matcher.group(2).trim());
+            try {
+                int quantidade = Integer.parseInt(matcher.group(1));
+                if (quantidade >= 1) {
+                    return new TextoComQuantidade(quantidade, matcher.group(2).trim());
+                }
+            } catch (NumberFormatException e) {
+                // numero grande demais para caber num int - trata como se
+                // nao houvesse quantidade valida, em vez de propagar o erro
             }
         }
         return new TextoComQuantidade(1, texto.trim());

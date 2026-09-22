@@ -6,9 +6,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import br.com.fiap.farmasusdigital.application.usecase.ProcessarMensagemTelegramUseCase;
-import br.com.fiap.farmasusdigital.infrastructure.telegram.dto.TelegramMessageDto;
 import br.com.fiap.farmasusdigital.infrastructure.telegram.dto.TelegramUpdateDto;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 
 // "telefone" do paciente e o chat id do Telegram, ja que a Bot API nao expoe
 // o numero de celular sem compartilhamento de contato
@@ -16,27 +16,26 @@ import br.com.fiap.farmasusdigital.infrastructure.telegram.dto.TelegramUpdateDto
 @RequestMapping("/telegram")
 public class TelegramWebhookController {
 
-    private final ProcessarMensagemTelegramUseCase processarMensagemTelegramUseCase;
-    private final TelegramClient telegramClient;
+    private final TelegramUpdateHandler telegramUpdateHandler;
 
-    public TelegramWebhookController(ProcessarMensagemTelegramUseCase processarMensagemTelegramUseCase,
-                                      TelegramClient telegramClient) {
-        this.processarMensagemTelegramUseCase = processarMensagemTelegramUseCase;
-        this.telegramClient = telegramClient;
+    public TelegramWebhookController(TelegramUpdateHandler telegramUpdateHandler) {
+        this.telegramUpdateHandler = telegramUpdateHandler;
     }
 
     @PostMapping("/webhook")
-    public ResponseEntity<Void> receberUpdate(@RequestBody TelegramUpdateDto update) {
-        TelegramMessageDto message = update.message();
-        if (message == null || message.chat() == null || message.text() == null || message.text().isBlank()) {
-            return ResponseEntity.ok().build();
-        }
-
-        Long chatId = message.chat().id();
-        String telefone = chatId.toString();
-        String resposta = processarMensagemTelegramUseCase.executar(telefone, message.text());
-        telegramClient.enviarMensagem(chatId, resposta);
-
+    public ResponseEntity<Void> receberUpdate(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(examples = @ExampleObject(value = """
+                            {
+                              "update_id": 1,
+                              "message": {
+                                "chat": { "id": 999999 },
+                                "text": "oi"
+                              }
+                            }
+                            """)))
+            @RequestBody TelegramUpdateDto update) {
+        telegramUpdateHandler.tratar(update);
         return ResponseEntity.ok().build();
     }
 }

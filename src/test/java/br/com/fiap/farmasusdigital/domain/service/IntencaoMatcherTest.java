@@ -10,7 +10,8 @@ class IntencaoMatcherTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"finalizar", "desejo finalizar a reserva", "quero concluir", "pode encerrar",
-            "quero fechar a reserva", "só isso mesmo", "e isso, obrigado"})
+            "quero fechar a reserva", "só isso mesmo", "e isso, obrigado", "pode confirmar",
+            "confirmar reserva"})
     void deveReconhecerIntencaoDeFinalizar(String texto) {
         assertThat(IntencaoMatcher.pareceFinalizacao(texto)).isTrue();
     }
@@ -105,5 +106,13 @@ class IntencaoMatcherTest {
 
         assertThat(resultado.quantidade()).isEqualTo(1);
         assertThat(resultado.nomeRestante()).isEqualTo("dipirona");
+    }
+
+    @Test
+    void naoDeveEstourarQuandoNumeroInformadoForGrandeDemaisParaUmInt() {
+        IntencaoMatcher.TextoComQuantidade resultado = IntencaoMatcher.extrairQuantidade("99999999999999999999 dipirona");
+
+        assertThat(resultado.quantidade()).isEqualTo(1);
+        assertThat(resultado.nomeRestante()).isEqualTo("99999999999999999999 dipirona");
     }
 }

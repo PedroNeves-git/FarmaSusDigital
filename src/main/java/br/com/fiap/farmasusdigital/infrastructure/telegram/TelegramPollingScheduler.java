@@ -10,8 +10,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 
-import br.com.fiap.farmasusdigital.application.usecase.ProcessarMensagemTelegramUseCase;
-import br.com.fiap.farmasusdigital.infrastructure.telegram.dto.TelegramMessageDto;
 import br.com.fiap.farmasusdigital.infrastructure.telegram.dto.TelegramUpdateDto;
 
 /**
@@ -27,13 +25,12 @@ public class TelegramPollingScheduler {
     private static final int TIMEOUT_LONG_POLLING_SEGUNDOS = 30;
 
     private final TelegramClient telegramClient;
-    private final ProcessarMensagemTelegramUseCase processarMensagemTelegramUseCase;
+    private final TelegramUpdateHandler telegramUpdateHandler;
     private final AtomicLong proximoOffset = new AtomicLong(0);
 
-    public TelegramPollingScheduler(TelegramClient telegramClient,
-                                     ProcessarMensagemTelegramUseCase processarMensagemTelegramUseCase) {
+    public TelegramPollingScheduler(TelegramClient telegramClient, TelegramUpdateHandler telegramUpdateHandler) {
         this.telegramClient = telegramClient;
-        this.processarMensagemTelegramUseCase = processarMensagemTelegramUseCase;
+        this.telegramUpdateHandler = telegramUpdateHandler;
     }
 
     @Scheduled(fixedDelayString = "${telegram.polling.interval-ms:500}")
@@ -52,19 +49,7 @@ public class TelegramPollingScheduler {
 
         for (TelegramUpdateDto update : atualizacoes) {
             proximoOffset.set(update.updateId() + 1);
-            processarUpdate(update);
+            telegramUpdateHandler.tratar(update);
         }
-    }
-
-    private void processarUpdate(TelegramUpdateDto update) {
-        TelegramMessageDto message = update.message();
-        if (message == null || message.chat() == null || message.text() == null || message.text().isBlank()) {
-            return;
-        }
-
-        Long chatId = message.chat().id();
-        String telefone = chatId.toString();
-        String resposta = processarMensagemTelegramUseCase.executar(telefone, message.text());
-        telegramClient.enviarMensagem(chatId, resposta);
     }
 }
